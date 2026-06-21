@@ -15,6 +15,9 @@ app = Flask(__name__)
 SECRET = os.getenv("LICENSE_SECRET", "my_secret_salt_2026")
 ADMIN_KEY = os.getenv("CLOUD_DICTIONARY_API_KEY", "")
 
+APP_VERSION = os.getenv("APP_VERSION", "1.0.0")
+DOWNLOAD_URL = os.getenv("DOWNLOAD_URL", "")
+
 REDIS_URL = os.getenv("REDIS_URL", "")
 LOCAL_DB = "cloud_dictionary.json"
 
@@ -30,32 +33,6 @@ if redis and REDIS_URL:
 def generate_key(pc_id):
     raw = SECRET + pc_id
     return hashlib.sha256(raw.encode()).hexdigest()
-
-
-@app.route("/", methods=["GET"])
-def home():
-    return jsonify({
-        "ok": True,
-        "service": "MCAddon Translator License + Cloud Dictionary"
-    })
-
-
-@app.route("/verify", methods=["POST"])
-def verify():
-    data = request.json or {}
-
-    pc_id = data.get("pc_id")
-    key = data.get("key")
-
-    if not pc_id or not key:
-        return jsonify({"status": "error"}), 400
-
-    valid_key = generate_key(pc_id)
-
-    if key == valid_key:
-        return jsonify({"status": "ok"})
-    else:
-        return jsonify({"status": "ng"})
 
 
 def load_local_dict():
@@ -76,6 +53,46 @@ def save_local_dict(data):
 
 def dict_key(source):
     return "dict:" + hashlib.sha256(source.encode("utf-8")).hexdigest()
+
+
+@app.route("/", methods=["GET"])
+def home():
+    return jsonify({
+        "ok": True,
+        "service": "MCAddon Translator License + Cloud Dictionary"
+    })
+
+
+@app.route("/version", methods=["GET"])
+def version():
+    return jsonify({
+        "version": APP_VERSION,
+        "download_url": DOWNLOAD_URL,
+        "notes": [
+            "クラウド辞書追加",
+            "翻訳レポート追加",
+            "品質スコア追加",
+            "アップデート確認機能追加"
+        ]
+    })
+
+
+@app.route("/verify", methods=["POST"])
+def verify():
+    data = request.json or {}
+
+    pc_id = data.get("pc_id")
+    key = data.get("key")
+
+    if not pc_id or not key:
+        return jsonify({"status": "error"}), 400
+
+    valid_key = generate_key(pc_id)
+
+    if key == valid_key:
+        return jsonify({"status": "ok"})
+    else:
+        return jsonify({"status": "ng"})
 
 
 @app.route("/lookup", methods=["POST"])
@@ -133,7 +150,12 @@ def add_dictionary():
 @app.route("/stats", methods=["GET"])
 def stats():
     if r:
-        total = len(r.keys("dict:*")) - 2
+        keys = r.keys("dict:*")
+        total = len([
+            key for key in keys
+            if key not in ["dict:ranking", "dict:updated_at"]
+        ])
+
         top = r.zrevrange("dict:ranking", 0, 19, withscores=True)
 
         return jsonify({
